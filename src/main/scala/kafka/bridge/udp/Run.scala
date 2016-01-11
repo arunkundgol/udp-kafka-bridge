@@ -18,9 +18,19 @@ import scala.collection.JavaConverters._
 import akka.actor.{ActorSystem, Actor, Props, ActorRef}
 import akka.io.{IO, Udp}
 
+// library for setting up to time message was received
+import java.text.SimpleDateFormat     
+import java.util.Calendar
+
+// library for setting up to receive UDP message to KAFKA server
 import kafka.javaapi.producer.Producer
 import kafka.producer.KeyedMessage
 import kafka.producer.ProducerConfig
+
+// library for setting up to create KAFKA topics
+import kafka.admin.AdminUtils
+import kafka.utils.{Utils, ZKStringSerializer, ZkUtils}
+import org.I0Itec.zkclient.ZkClient
 
 object Run extends App {
   override def main(args: Array[String]): Unit = {
@@ -30,7 +40,6 @@ object Run extends App {
     system.settings.config.withOnlyPath("kafka").entrySet.asScala.foreach{e =>
       kafkaProps.put(e.getKey.substring(6), e.getValue.unwrapped)
     }
-
     val kafkaProducer = system.actorOf(Props(new Generator(kafkaProps)))
     val udpListener = system.actorOf(Props(new Listener(kafkaProducer)))
   }
@@ -46,24 +55,28 @@ class Listener(nextActor: ActorRef) extends Actor {
     conf.getInt("bind.port")))
  
   def receive = {
-    case Udp.Bound(local) ⇒
+    case Udp.Bound(local)=>
       context.become(ready(sender))
-  }
+  
  
   def ready(socket: ActorRef): Receive = {
-    case Udp.Received(data, remote) ⇒
+    case Udp.Received(data, remote) =>
       nextActor ! data.utf8String
-    case Udp.Unbind  ⇒ socket ! Udp.Unbind
-    case Udp.Unbound ⇒ context.stop(self)
+    case Udp.Unbind  => socket ! Udp.Unbind
+    case Udp.Unbound => context.stop(self)
   }
 }
 
 class Generator(kafkaProps: java.util.Properties) extends Actor {
   val producer = new Producer[Integer, String](new ProducerConfig(kafkaProps))
-  val topic = context.system.settings.config.getString("topic")
-
+  val topicName = context.system.settings.config.getString("topic")
+  val timeformat = new SimpleDateFormat("dd/MM/yyyy,HH:mm:ss")
+  
   def receive = {
     case message: String => 
-      producer.send(new KeyedMessage[Integer, String](topic, message))
+      // adding current date and time to UDP message
+      val currentTime = timeformat.format(Calendar.getInstance().getTime())
+      producer.send(new KeyedMessage[Integer, String](topicName, currentTime+";"+message))
   }
 }
+
