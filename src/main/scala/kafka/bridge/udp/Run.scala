@@ -27,11 +27,6 @@ import kafka.javaapi.producer.Producer
 import kafka.producer.KeyedMessage
 import kafka.producer.ProducerConfig
 
-// library for setting up to create KAFKA topics
-import kafka.admin.AdminUtils
-import kafka.utils.{Utils, ZKStringSerializer, ZkUtils}
-import org.I0Itec.zkclient.ZkClient
-
 object Run extends App {
   override def main(args: Array[String]): Unit = {
     val system = ActorSystem("udp-kafka-bridge")
@@ -49,6 +44,8 @@ class Listener(nextActor: ActorRef) extends Actor {
   import context.system
   
   val conf = context.system.settings.config
+  val port = context.system.settings.config.getInt("bind.port")
+  println("Starting UDP-KAFKA-BRIDGE on port $port")
 
   IO(Udp) ! Udp.Bind(self, new java.net.InetSocketAddress(
     conf.getString("bind.host"),
